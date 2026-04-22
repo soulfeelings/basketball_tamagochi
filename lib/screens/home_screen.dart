@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import 'training_screen.dart';
 import 'match_screen.dart';
+import 'nutrition_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -53,6 +54,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Energy bar
               _buildEnergyBar(player),
+              const SizedBox(height: 8),
+
+              // Hunger bar
+              _buildNutritionBar(
+                icon: Icons.restaurant,
+                label: 'Hunger',
+                value: player.hunger,
+                maxValue: 100,
+                status: player.hungerStatus,
+                color: player.hunger <= 25
+                    ? Colors.green
+                    : player.hunger <= 50
+                        ? Colors.lightGreen
+                        : player.hunger <= 75
+                            ? Colors.orange
+                            : Colors.red,
+              ),
+              const SizedBox(height: 8),
+
+              // Fatigue bar
+              _buildNutritionBar(
+                icon: Icons.bedtime,
+                label: 'Fatigue',
+                value: player.fatigue,
+                maxValue: 100,
+                status: player.fatigueStatus,
+                color: player.fatigue <= 30
+                    ? Colors.green
+                    : player.fatigue <= 60
+                        ? Colors.yellow
+                        : player.fatigue <= 85
+                            ? Colors.orange
+                            : Colors.red,
+              ),
               const SizedBox(height: 20),
 
               // Action buttons
@@ -72,8 +107,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildActionButton(
+                      icon: Icons.restaurant,
+                      label: 'EAT',
+                      color: Colors.green,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NutritionScreen()),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionButton(
                       icon: Icons.sports_basketball,
-                      label: 'PLAY MATCH',
+                      label: 'MATCH',
                       color: Colors.orange,
                       onTap: () => Navigator.push(
                         context,
@@ -139,9 +186,41 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${player.position} | Lvl ${player.level}',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                Row(
+                  children: [
+                    Text(
+                      '${player.position} | Lvl ${player.level}',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: player.hunger <= 25
+                            ? Colors.green.withValues(alpha: 0.2)
+                            : player.hunger <= 50
+                                ? Colors.lightGreen.withValues(alpha: 0.2)
+                                : player.hunger <= 75
+                                    ? Colors.orange.withValues(alpha: 0.2)
+                                    : Colors.red.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        player.hungerStatus,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: player.hunger <= 25
+                              ? Colors.green
+                              : player.hunger <= 50
+                                  ? Colors.lightGreen
+                                  : player.hunger <= 75
+                                      ? Colors.orange
+                                      : Colors.red,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 // XP bar
@@ -289,6 +368,54 @@ class _HomeScreenState extends State<HomeScreen> {
               fontSize: 13,
               fontWeight: FontWeight.bold,
               color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNutritionBar({
+    required IconData icon,
+    required String label,
+    required int value,
+    required int maxValue,
+    required String status,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16213E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: value / maxValue,
+                backgroundColor: Colors.grey[800],
+                valueColor: AlwaysStoppedAnimation(color),
+                minHeight: 10,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            status,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],

@@ -2,14 +2,21 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/player.dart';
+import '../models/food.dart';
 
 class GameProvider extends ChangeNotifier {
   Player? _player;
   final Random _random = Random();
   List<String> _matchLog = [];
 
+  // Nutrition tracking
+  int trainingBonusSessions = 0;
+  double _trainingBonusMultiplier = 1.0;
+  Map<String, int> _nutritionStatBoosts = {}; // tracks permanent boosts per stat, cap at +5
+
   Player? get player => _player;
   List<String> get matchLog => _matchLog;
+  int get remainingBonusSessions => trainingBonusSessions;
 
   bool get hasPlayer => _player != null;
 
@@ -19,6 +26,16 @@ class GameProvider extends ChangeNotifier {
     if (data != null) {
       _player = Player.deserialize(data);
       _player!.regenerateEnergy();
+      _player!.updateHunger();
+      _player!.updateFatigue();
+
+      // Load nutrition extras
+      trainingBonusSessions = prefs.getInt('trainingBonusSessions') ?? 0;
+      _trainingBonusMultiplier = prefs.getDouble('trainingBonusMultiplier') ?? 1.0;
+      for (final stat in ['shooting', 'dribbling', 'defense', 'speed', 'stamina']) {
+        _nutritionStatBoosts[stat] = prefs.getInt('nutritionBoost_$stat') ?? 0;
+      }
+
       notifyListeners();
     }
   }
@@ -27,10 +44,18 @@ class GameProvider extends ChangeNotifier {
     if (_player == null) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('player', _player!.serialize());
+    await prefs.setInt('trainingBonusSessions', trainingBonusSessions);
+    await prefs.setDouble('trainingBonusMultiplier', _trainingBonusMultiplier);
+    for (final entry in _nutritionStatBoosts.entries) {
+      await prefs.setInt('nutritionBoost_${entry.key}', entry.value);
+    }
   }
 
   Future<void> createPlayer(String name, String position) async {
     _player = Player(name: name, position: position);
+    trainingBonusSessions = 0;
+    _trainingBonusMultiplier = 1.0;
+    _nutritionStatBoosts = {};
     await savePlayer();
     notifyListeners();
   }
@@ -39,7 +64,65 @@ class GameProvider extends ChangeNotifier {
     _player = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('player');
+    await prefs.remove('trainingBonusSessions');
+    await prefs.remove('trainingBonusMultiplier');
+    for (final stat in ['shooting', 'dribbling', 'defense', 'speed', 'stamina']) {
+      await prefs.remove('nutritionBoost_$stat');
+    }
     notifyListeners();
+  }
+
+  // Eat food
+  Future<String> eat(Food food) async {
+    if (_player == null) return '';
+    if (_player!.coins < food.cost) return 'Not enough coins!';
+
+    _player!.coins -= food.cost;
+    _player!.hunger = (_player!.hunger - food.hungerReduction).clamp(0, 100);
+    _player!.energy = (_player!.energy + food.energyBoost).clamp(0, _player!.maxEnergy);
+    _player!.fatigue = (_player!.fatigue + food.fatigueEffect).clamp(0, 100);
+
+    String result = '${food.emoji} Ate ${food.name}!';
+
+    // Training bonus
+    if (food.trainingBonus != null) {
+      trainingBonusSessions = 2;
+      _trainingBonusMultiplier = 1.0 + food.trainingBonus!;
+      result += ' Training bonus active for 2 sessions!';
+    }
+
+    // Permanent stat boost
+    if (food.permanentStatBoost != null && food.boostStat != null) {
+      final stat = food.boostStat!;
+      final currentBoost = _nutritionStatBoosts[stat] ?? 0;
+      if (currentBoost < 5) {
+        _nutritionStatBoosts[stat] = currentBoost + food.permanentStatBoost!;
+        switch (stat) {
+          case 'shooting':
+            _player!.shooting = (_player!.shooting + food.permanentStatBoost!).clamp(0, 99);
+            break;
+          case 'dribbling':
+            _player!.dribbling = (_player!.dribbling + food.permanentStatBoost!).clamp(0, 99);
+            break;
+          case 'defense':
+            _player!.defense = (_player!.defense + food.permanentStatBoost!).clamp(0, 99);
+            break;
+          case 'speed':
+            _player!.speed = (_player!.speed + food.permanentStatBoost!).clamp(0, 99);
+            break;
+          case 'stamina':
+            _player!.stamina = (_player!.stamina + food.permanentStatBoost!).clamp(0, 99);
+            break;
+        }
+        result += ' +${food.permanentStatBoost} $stat!';
+      } else {
+        result += ' ($stat boost maxed at +5)';
+      }
+    }
+
+    await savePlayer();
+    notifyListeners();
+    return result;
   }
 
   // Training costs 20 energy, improves a skill by 1-3 points
@@ -48,33 +131,48 @@ class GameProvider extends ChangeNotifier {
     if (_player!.energy < 20) return 'Not enough energy! Wait for it to recover.';
 
     _player!.energy -= 20;
-    int gain = _random.nextInt(3) + 1;
+    int baseGain = _random.nextInt(3) + 1;
+
+    // Apply training multiplier from hunger/fatigue
+    double multiplier = _player!.trainingMultiplier;
+
+    // Apply food training bonus
+    if (trainingBonusSessions > 0) {
+      multiplier *= _trainingBonusMultiplier;
+      trainingBonusSessions--;
+    }
+
+    int gain = (baseGain * multiplier).round().clamp(1, 10);
     String result;
+    String bonusText = multiplier != 1.0 ? ' (${multiplier > 1.0 ? "+" : ""}${((multiplier - 1.0) * 100).round()}%)' : '';
 
     switch (skill) {
       case 'shooting':
         _player!.shooting = (_player!.shooting + gain).clamp(0, 99);
-        result = 'Shooting +$gain (now ${_player!.shooting})';
+        result = 'Shooting +$gain$bonusText (now ${_player!.shooting})';
         break;
       case 'dribbling':
         _player!.dribbling = (_player!.dribbling + gain).clamp(0, 99);
-        result = 'Dribbling +$gain (now ${_player!.dribbling})';
+        result = 'Dribbling +$gain$bonusText (now ${_player!.dribbling})';
         break;
       case 'defense':
         _player!.defense = (_player!.defense + gain).clamp(0, 99);
-        result = 'Defense +$gain (now ${_player!.defense})';
+        result = 'Defense +$gain$bonusText (now ${_player!.defense})';
         break;
       case 'speed':
         _player!.speed = (_player!.speed + gain).clamp(0, 99);
-        result = 'Speed +$gain (now ${_player!.speed})';
+        result = 'Speed +$gain$bonusText (now ${_player!.speed})';
         break;
       case 'stamina':
         _player!.stamina = (_player!.stamina + gain).clamp(0, 99);
-        result = 'Stamina +$gain (now ${_player!.stamina})';
+        result = 'Stamina +$gain$bonusText (now ${_player!.stamina})';
         break;
       default:
         return 'Unknown skill';
     }
+
+    // Training adds a bit of fatigue
+    _player!.fatigue = (_player!.fatigue + 5).clamp(0, 100);
 
     _player!.addXp(15);
     await savePlayer();
@@ -89,6 +187,13 @@ class GameProvider extends ChangeNotifier {
 
     _player!.energy -= 40;
     _matchLog.clear();
+
+    // Check nutrition restrictions
+    if (!_player!.canEnterMatch) {
+      _matchLog.add('Cannot play - too hungry or fatigued!');
+      notifyListeners();
+      return false;
+    }
 
     // Opponent strength based on league
     int opponentOverall;
@@ -109,6 +214,8 @@ class GameProvider extends ChangeNotifier {
         opponentOverall = 15;
     }
 
+    double performanceMultiplier = _player!.matchPerformanceMultiplier;
+
     int playerScore = 0;
     int opponentScore = 0;
 
@@ -117,8 +224,8 @@ class GameProvider extends ChangeNotifier {
       _matchLog.add('--- Quarter $q ---');
 
       for (int play = 0; play < 3; play++) {
-        // Player attack
-        int chance = _player!.shooting + _player!.dribbling + _random.nextInt(30);
+        // Player attack (apply performance multiplier)
+        int chance = ((_player!.shooting + _player!.dribbling) * performanceMultiplier).round() + _random.nextInt(30);
         if (chance > opponentOverall + _random.nextInt(40)) {
           int pts = _random.nextInt(3) == 0 ? 3 : 2;
           playerScore += pts;
@@ -129,7 +236,7 @@ class GameProvider extends ChangeNotifier {
 
         // Opponent attack
         chance = opponentOverall + _random.nextInt(30);
-        if (chance > _player!.defense + _random.nextInt(40)) {
+        if (chance > (_player!.defense * performanceMultiplier).round() + _random.nextInt(40)) {
           int pts = _random.nextInt(3) == 0 ? 3 : 2;
           opponentScore += pts;
           _matchLog.add('Opponent scores $pts pts.');
@@ -143,6 +250,11 @@ class GameProvider extends ChangeNotifier {
 
     bool won = playerScore > opponentScore;
     _player!.matchesPlayed++;
+
+    // Match adds fatigue
+    _player!.fatigue = (_player!.fatigue + 15).clamp(0, 100);
+    // Match increases hunger
+    _player!.hunger = (_player!.hunger + 10).clamp(0, 100);
 
     if (won) {
       _player!.matchesWon++;
@@ -193,6 +305,8 @@ class GameProvider extends ChangeNotifier {
 
   void refreshEnergy() {
     _player?.regenerateEnergy();
+    _player?.updateHunger();
+    _player?.updateFatigue();
     notifyListeners();
   }
 }

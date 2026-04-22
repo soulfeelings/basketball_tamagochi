@@ -44,7 +44,56 @@ class TrainingScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
+            // Condition info
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16213E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.restaurant, color: Colors.grey[400], size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    player.hungerStatus,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.bedtime, color: Colors.grey[400], size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    player.fatigueStatus,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Training: ${(player.trainingMultiplier * 100).round()}%',
+                    style: TextStyle(
+                      color: player.trainingMultiplier >= 1.0 ? Colors.green : Colors.orange,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (game.remainingBonusSessions > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '+BONUS (${game.remainingBonusSessions})',
+                        style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Choose a skill to train:',
               style: TextStyle(

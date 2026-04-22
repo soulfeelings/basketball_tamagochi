@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# E2E test artifacts
+e2e/node_modules/
+e2e/results/
+e2e/report/
+*.deb
+
+# Screenshots
+screenshots/
+test/goldens/
+assets/player.glb
